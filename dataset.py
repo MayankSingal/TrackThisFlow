@@ -99,7 +99,7 @@ class track_and_flow_dataset(data.Dataset):
         
         len0 = len(filtered_points0)
         len1 = len(filtered_points1)
-        minLen = min(len0, len1)
+        minLen = min(min(len0, len1),1024)
         
         ##### NO IDEA WHY THIS WORKS ##### JUST MAKE SURE TO DO THIS
 
@@ -153,7 +153,7 @@ class track_and_flow_dataset(data.Dataset):
         
         # print("A",len(pc1), len(pc2))
         skip = 0
-        if(pc1 is None or pc2 is None or generated_data is None or object0_3d_bbox_in_velo_frame is None or object1_3d_bbox_in_velo_frame is None):
+        if(pc1 is None or pc2 is None or generated_data is None or object0_3d_bbox_in_velo_frame is None or object1_3d_bbox_in_velo_frame is None or minLen < 256):
             pc1 = 1
             pc2 = 1
             generated_data = 1
