@@ -14,34 +14,35 @@ import pykitti
 import open3d as o3d
 from utils_dataset import roty, compute_box_3d, cart2hom, read_calib_file, project_rect_to_velo, inverse_rigid_trans, convert_to_local, boxContainmentChecker, lines
 
-
+sequences = ['0000','0001','0002','0003','0004','0005','0006','0007','0008','0009','0010','0011','0012','0013','0014','0015','0016','0017','0018','0019','0020']
 
 #### Returns a list of [index1, index2, ID_in_sequence]
-def populate_train_list(basedir, sequence):
-    
-    data = pykitti.tracking(basedir, sequence)
-    
-    data_dict = {}
-    
-    for i in range(len(data)):
-        objects = data.get_objects(i)
-        for obj in objects:
-            if(obj.type=='DontCare'): 
-                continue
-            if(obj.track_id in data_dict.keys()):
-                data_dict[obj.track_id].append(i)
-            else:
-                data_dict[obj.track_id] = [i]
-                
+def populate_train_list(basedir):
     
     tracklets_list = []
-    
-    for key in data_dict.keys():
+
+    for sequence in sequences:
         
-        for i in range(len(data_dict[key])-1):
+        data = pykitti.tracking(basedir, sequence)
+        
+        data_dict = {}
+        
+        for i in range(len(data)):
+            objects = data.get_objects(i)
+            for obj in objects:
+                if(obj.type=='DontCare'): 
+                    continue
+                if(obj.track_id in data_dict.keys()):
+                    data_dict[obj.track_id].append(i)
+                else:
+                    data_dict[obj.track_id] = [i]
+                    
+        for key in data_dict.keys():
             
-            if(data_dict[key][i+1] - data_dict[key][i] == 1):   
-                tracklets_list.append([data_dict[key][i],data_dict[key][i+1],key])
+            for i in range(len(data_dict[key])-1):
+                
+                if(data_dict[key][i+1] - data_dict[key][i] == 1):   
+                    tracklets_list.append([data_dict[key][i],data_dict[key][i+1],key, sequence])
                 
     return tracklets_list            
 
@@ -53,20 +54,20 @@ def populate_train_list(basedir, sequence):
 
 class track_and_flow_dataset(data.Dataset):
     
-    def __init__(self, basedir, sequence, transform=None, gen_func=None, args=None, viz=False):
+    def __init__(self, basedir, transform=None, gen_func=None, args=None, viz=False):
         
-        self.data = pykitti.tracking(basedir, sequence)
-        calib_location = basedir + "calib/" + sequence + '.txt'
-        self.calibs = read_calib_file(calib_location)
+        self.data = [pykitti.tracking(basedir, sequence) for sequence in sequences]
+        calib_locations = [basedir + "calib/" + sequence + '.txt' for sequence in sequences]
+        self.calibs = [read_calib_file(calib_location) for calib_location in calib_locations]
 
-        self.R0 = self.calibs['R_rect']
-        self.R0 = np.reshape(self.R0,[3,3])
+        self.R0 = [calibs_['R_rect'] for calibs_ in self.calibs]
+        self.R0 = [np.reshape(R0_,[3,3]) for R0_ in self.R0]
 
-        self.V2C = self.calibs['Tr_velo_cam']
-        self.V2C = np.reshape(self.V2C, [3,4])
-        self.C2V = inverse_rigid_trans(self.V2C)
+        self.V2C = [calibs_['Tr_velo_cam'] for calibs_ in self.calibs]
+        self.V2C = [np.reshape(V2C_, [3,4]) for V2C_ in self.V2C]
+        self.C2V = [inverse_rigid_trans(V2C_) for V2C_ in self.V2C]
         
-        self.tracklets_list = populate_train_list(basedir, sequence)
+        self.tracklets_list = populate_train_list(basedir)
         
         self.transform = transform
         self.gen_func = gen_func
@@ -77,29 +78,34 @@ class track_and_flow_dataset(data.Dataset):
         
     def __getitem__(self, index):
         
-        idx0, idx1, object_id = self.tracklets_list[index]
-        velo0 = self.data.get_velo(idx0)[:,:3]
-        velo1 = self.data.get_velo(idx1)[:,:3]
+        idx0, idx1, object_id, sequence = self.tracklets_list[index]
+        sequence = sequences.index(sequence)
         
-        objects0 = self.data.get_objects(idx0)
-        objects1 = self.data.get_objects(idx1)
+        velo0 = self.data[sequence].get_velo(idx0)[:,:3]
+        velo1 = self.data[sequence].get_velo(idx1)[:,:3]
+        
+        objects0 = self.data[sequence].get_objects(idx0)
+        objects1 = self.data[sequence].get_objects(idx1)
         
         obj_to_track0 = [obj for obj in objects0 if (obj.track_id==object_id and obj.type != 'DontCare')][0]
         obj_to_track1 = [obj for obj in objects1 if (obj.track_id==object_id and obj.type != 'DontCare')][0]
         
         bounding_box_3d, R, translation = compute_box_3d(obj_to_track0)
-        object0_3d_bbox_in_velo_frame = project_rect_to_velo(bounding_box_3d, self.R0, self.C2V)
+        object0_3d_bbox_in_velo_frame = project_rect_to_velo(bounding_box_3d, self.R0[sequence], self.C2V[sequence])
         box_containment_checker = boxContainmentChecker(object0_3d_bbox_in_velo_frame)
         filtered_points0 = velo0[box_containment_checker.check_batch(velo0)]
         
         bounding_box_3d, R, translation = compute_box_3d(obj_to_track1)
-        object1_3d_bbox_in_velo_frame = project_rect_to_velo(bounding_box_3d, self.R0, self.C2V)
+        object1_3d_bbox_in_velo_frame = project_rect_to_velo(bounding_box_3d, self.R0[sequence], self.C2V[sequence])
         box_containment_checker = boxContainmentChecker(object1_3d_bbox_in_velo_frame)
         filtered_points1 = velo1[box_containment_checker.check_batch(velo1)]
         
         len0 = len(filtered_points0)
         len1 = len(filtered_points1)
         minLen = min(min(len0, len1),1024)
+        
+        random.shuffle(filtered_points0)
+        random.shuffle(filtered_points1)
         
         ##### NO IDEA WHY THIS WORKS ##### JUST MAKE SURE TO DO THIS
 
@@ -153,7 +159,7 @@ class track_and_flow_dataset(data.Dataset):
         
         # print("A",len(pc1), len(pc2))
         skip = 0
-        if(pc1 is None or pc2 is None or generated_data is None or object0_3d_bbox_in_velo_frame is None or object1_3d_bbox_in_velo_frame is None or minLen < 256):
+        if(pc1 is None or pc2 is None or generated_data is None or object0_3d_bbox_in_velo_frame is None or object1_3d_bbox_in_velo_frame is None or minLen < 128):
             pc1 = 1
             pc2 = 1
             generated_data = 1

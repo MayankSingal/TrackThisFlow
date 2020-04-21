@@ -12,19 +12,24 @@ import models
 import cmd_args
 import open3d as o3d
 from utils_dataset import lines
+from torch.utils.tensorboard import SummaryWriter
+
 
 args = cmd_args.parse_args_from_yaml("/home/mayank/Mayank/TrackThisFlow/configs/test_ours_KITTI.yaml")
 
 basedir = "/home/mayank/Data/KITTI/training/"
-sequence = "0000"
 
-val_dataset = dataset.track_and_flow_dataset(basedir,sequence,
+writer = SummaryWriter()
+
+val_dataset = dataset.track_and_flow_dataset(basedir,
     transform=transforms.ProcessData(args.data_process,
                                         args.num_points,
                                         args.allow_less_points),
     gen_func=transforms.GenerateDataUnsymmetric(args),
     args=args
 )
+
+print("Length of dataset:", len(val_dataset))
 
 val_loader = torch.utils.data.DataLoader(
     val_dataset,
@@ -83,11 +88,14 @@ criterion = torch.nn.MSELoss().cuda()
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, weight_decay=0.0001)
 
+
 for epoch in range(5):
     # with torch.no_grad():
+    skipped = 0
     for i, (pc1, pc2, generated_data, box1, box2, skip) in enumerate(val_loader):
         
-        if(skip):
+        if(skip==1):
+            skipped += 1
             continue
         
         box1 = box1.cuda()
@@ -119,80 +127,81 @@ for epoch in range(5):
         optimizer.step()
         
         if(i%5 == 0):
-            print("Translation Loss:", loss_translation.item(), "| NN Loss:", loss_nn.item(), "| Total Loss:", loss.item())
-            # print("Total Loss:", loss.item())
+            print("Epoch", epoch, "| Iteration:", i,  " | Translation Loss:", loss_translation.item(), "| NN Loss:", loss_nn.item(), "| Total Loss:", loss.item(), " | Skipped:", skipped)
+            writer.add_scalar("translation_loss", loss_translation.item(), epoch*(len(val_dataset) + i))
+            writer.add_scalar("nn_loss", loss_nn.item(), epoch*(len(val_dataset)) + i)
+            writer.add_scalar("total_loss", loss.item(), epoch*(len(val_dataset)) + i)            
+        
+        
+        if(i%100 == 0):
+            output_checker = model_checker(pc1, pc2, generated_data)
+            output_mean_translation_checker = torch.mean(output_checker,axis=2)
+            translated_box1_checker = box1 + output_mean_translation_checker
+            translated_box1_checker = translated_box1_checker.view(translated_box1_checker.size(0),-1)
+                
+            translated_box1 = translated_box1.view(-1,8,3).data.cpu().numpy()[0]
+            colors = [[0, 1, 0] for i in range(len(lines))]
+            line_set_translated_box1 = o3d.geometry.LineSet(
+                points=o3d.utility.Vector3dVector(translated_box1),
+                lines=o3d.utility.Vector2iVector(lines),
+            )
+            line_set_translated_box1.colors = o3d.utility.Vector3dVector(colors)
             
-        
-        
-    if(viz==True):
-        output_checker = model_checker(pc1, pc2, generated_data)
-        output_mean_translation_checker = torch.mean(output_checker,axis=2)
-        translated_box1_checker = box1 + output_mean_translation_checker
-        translated_box1_checker = translated_box1_checker.view(translated_box1_checker.size(0),-1)
+            translated_box1_checker = translated_box1_checker.view(-1,8,3).data.cpu().numpy()[0]
+            colors = [[0, 0, 0] for i in range(len(lines))]
+            line_set_translated_box1_checker = o3d.geometry.LineSet(
+                points=o3d.utility.Vector3dVector(translated_box1_checker),
+                lines=o3d.utility.Vector2iVector(lines),
+            )
+            line_set_translated_box1_checker.colors = o3d.utility.Vector3dVector(colors)
             
-        translated_box1 = translated_box1.view(-1,8,3).data.cpu().numpy()[0]
-        colors = [[0, 1, 0] for i in range(len(lines))]
-        line_set_translated_box1 = o3d.geometry.LineSet(
-            points=o3d.utility.Vector3dVector(translated_box1),
-            lines=o3d.utility.Vector2iVector(lines),
-        )
-        line_set_translated_box1.colors = o3d.utility.Vector3dVector(colors)
-        
-        translated_box1_checker = translated_box1_checker.view(-1,8,3).data.cpu().numpy()[0]
-        colors = [[0, 0, 0] for i in range(len(lines))]
-        line_set_translated_box1_checker = o3d.geometry.LineSet(
-            points=o3d.utility.Vector3dVector(translated_box1_checker),
-            lines=o3d.utility.Vector2iVector(lines),
-        )
-        line_set_translated_box1_checker.colors = o3d.utility.Vector3dVector(colors)
-        
-        non_translated_box1 = box1.view(-1,8,3)[0] #+ output_mean_translation
-        non_translated_box1 = non_translated_box1.data.cpu().numpy()
-        
-        colors = [[0, 0, 1] for i in range(len(lines))]
-        line_set_non_translated_box1 = o3d.geometry.LineSet(
-            points=o3d.utility.Vector3dVector(non_translated_box1),
-            lines=o3d.utility.Vector2iVector(lines),
-        )
-        line_set_non_translated_box1.colors = o3d.utility.Vector3dVector(colors)
-        
-        non_translated_box2 = box2.view(-1,8,3)[0] #+ output_mean_translation
-        non_translated_box2 = non_translated_box2.data.cpu().numpy()
-        
-        colors = [[1, 0, 0] for i in range(len(lines))]
-        line_set_non_translated_box2 = o3d.geometry.LineSet(
-            points=o3d.utility.Vector3dVector(non_translated_box2),
-            lines=o3d.utility.Vector2iVector(lines),
-        )
-        line_set_non_translated_box2.colors = o3d.utility.Vector3dVector(colors)
-        
-        projected = pc1.data.cpu().numpy() + output.data.cpu().numpy()
-        projected = projected[0].transpose()
+            non_translated_box1 = box1.view(-1,8,3)[0] #+ output_mean_translation
+            non_translated_box1 = non_translated_box1.data.cpu().numpy()
+            
+            colors = [[0, 0, 1] for i in range(len(lines))]
+            line_set_non_translated_box1 = o3d.geometry.LineSet(
+                points=o3d.utility.Vector3dVector(non_translated_box1),
+                lines=o3d.utility.Vector2iVector(lines),
+            )
+            line_set_non_translated_box1.colors = o3d.utility.Vector3dVector(colors)
+            
+            non_translated_box2 = box2.view(-1,8,3)[0] #+ output_mean_translation
+            non_translated_box2 = non_translated_box2.data.cpu().numpy()
+            
+            colors = [[1, 0, 0] for i in range(len(lines))]
+            line_set_non_translated_box2 = o3d.geometry.LineSet(
+                points=o3d.utility.Vector3dVector(non_translated_box2),
+                lines=o3d.utility.Vector2iVector(lines),
+            )
+            line_set_non_translated_box2.colors = o3d.utility.Vector3dVector(colors)
+            
+            projected = pc1.data.cpu().numpy() + output.data.cpu().numpy()
+            projected = projected[0].transpose()
 
-        projected_checker = pc1.data.cpu().numpy() + output_checker.data.cpu().numpy()
-        projected_checker = projected_checker[0].transpose()
-        
-        pc1 = pc1.data.cpu().numpy()[0].transpose()
-        pc2 = pc2.data.cpu().numpy()[0].transpose()
-        
-        
-        pcd1 = o3d.geometry.PointCloud()
-        pcd1.points = o3d.utility.Vector3dVector(pc1)
-        pcd1.paint_uniform_color((0.0,0.0,1.0))
-        
-        pcd2 = o3d.geometry.PointCloud()
-        pcd2.points = o3d.utility.Vector3dVector(pc2)
-        pcd2.paint_uniform_color((1.0,0.0,0.0))
-        
-        pcd3 = o3d.geometry.PointCloud()
-        pcd3.points = o3d.utility.Vector3dVector(projected)
-        pcd3.paint_uniform_color((0.0,1.0,0.0))
-        
-        pcd4 = o3d.geometry.PointCloud()
-        pcd4.points = o3d.utility.Vector3dVector(projected_checker)
-        pcd4.paint_uniform_color((0.0,0.0,0.0))
-        
-        o3d.visualization.draw_geometries([pcd1, pcd2, pcd3, pcd4, line_set_translated_box1, line_set_non_translated_box1, line_set_non_translated_box2, line_set_translated_box1_checker])
+            projected_checker = pc1.data.cpu().numpy() + output_checker.data.cpu().numpy()
+            projected_checker = projected_checker[0].transpose()
+            
+            pc1 = pc1.data.cpu().numpy()[0].transpose()
+            pc2 = pc2.data.cpu().numpy()[0].transpose()
+            
+            
+            pcd1 = o3d.geometry.PointCloud()
+            pcd1.points = o3d.utility.Vector3dVector(pc1)
+            pcd1.paint_uniform_color((0.0,0.0,1.0))
+            
+            pcd2 = o3d.geometry.PointCloud()
+            pcd2.points = o3d.utility.Vector3dVector(pc2)
+            pcd2.paint_uniform_color((1.0,0.0,0.0))
+            
+            pcd3 = o3d.geometry.PointCloud()
+            pcd3.points = o3d.utility.Vector3dVector(projected)
+            pcd3.paint_uniform_color((0.0,1.0,0.0))
+            
+            pcd4 = o3d.geometry.PointCloud()
+            pcd4.points = o3d.utility.Vector3dVector(projected_checker)
+            pcd4.paint_uniform_color((0.0,0.0,0.0))
+            
+            o3d.visualization.draw_geometries([pcd1, pcd2, pcd3, pcd4, line_set_translated_box1, line_set_non_translated_box1, line_set_non_translated_box2, line_set_translated_box1_checker])
 
 
         
