@@ -33,7 +33,7 @@ dataset: KITTI
 remove_ground: True
 
 data_process:
-  DEPTH_THRESHOLD: 35
+  DEPTH_THRESHOLD: 0
   NO_CORR: True
 
 print_freq: 50

@@ -102,18 +102,23 @@ class track_and_flow_dataset(data.Dataset):
         minLen = min(len0, len1)
         
         ##### NO IDEA WHY THIS WORKS ##### JUST MAKE SURE TO DO THIS
-        # filtered_points0[:,:3] *= -1.
-        # filtered_points1[:,:3] *= -1.
-        # print(filtered_points0[:,1].shape)
+
         filtered_points0 = np.vstack([filtered_points0[:,1], filtered_points0[:,2], filtered_points0[:,0]]).transpose()
         filtered_points1 = np.vstack([filtered_points1[:,1], filtered_points1[:,2], filtered_points1[:,0]]).transpose()
-        # print(filtered_points0.shape)
-        # brak
+
+        # print("C",len(filtered_points0), len(filtered_points1))
+
         #### Start processing ####
         pc1_transformed, pc2_transformed, sf = self.transform([filtered_points0[:minLen], filtered_points1[:minLen]])
         # pc1_transformed, pc2_transformed, sf = self.transform([velo0[:2048], velo1[:2048]])
         
+        # print("B",len(pc1_transformed), len(pc2_transformed))
+
         pc1, pc2, sf, generated_data = self.gen_func([pc1_transformed, pc2_transformed, sf])
+        
+        #### Change axes for bboxes also
+        object0_3d_bbox_in_velo_frame = np.vstack([object0_3d_bbox_in_velo_frame[:,1], object0_3d_bbox_in_velo_frame[:,2], object0_3d_bbox_in_velo_frame[:,0]]).transpose()
+        object1_3d_bbox_in_velo_frame = np.vstack([object1_3d_bbox_in_velo_frame[:,1], object1_3d_bbox_in_velo_frame[:,2], object1_3d_bbox_in_velo_frame[:,0]]).transpose()
 
         
         if(self.viz == True):
@@ -145,12 +150,23 @@ class track_and_flow_dataset(data.Dataset):
             pcd2.paint_uniform_color((1.0,0.0,0.0))
             
             o3d.visualization.draw_geometries([pcd0, pcd1, pcd2, line_set0, line_set1])
+        
+        # print("A",len(pc1), len(pc2))
+        skip = 0
+        if(pc1 is None or pc2 is None or generated_data is None or object0_3d_bbox_in_velo_frame is None or object1_3d_bbox_in_velo_frame is None):
+            pc1 = 1
+            pc2 = 1
+            generated_data = 1
+            object0_3d_bbox_in_velo_frame = 1
+            object1_3d_bbox_in_velo_frame = 1
+            skip = 1
             
-        return pc1, pc2, generated_data
+        return pc1, pc2, generated_data, object0_3d_bbox_in_velo_frame, object1_3d_bbox_in_velo_frame, skip
         
     
     def __len__(self):
         return len(self.tracklets_list)
+    
     
     
     
