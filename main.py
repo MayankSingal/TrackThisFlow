@@ -86,13 +86,27 @@ def nearest_neighbour(x, y):
 
 criterion = torch.nn.MSELoss().cuda()
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.0001, weight_decay=0.0001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.000005, weight_decay=0.0001)
 
 
-for epoch in range(5):
+for epoch in range(1):
     # with torch.no_grad():
     skipped = 0
     for i, (pc1, pc2, generated_data, box1, box2, skip) in enumerate(val_loader):
+        
+        
+        if(i%1000 == 0):
+            state = {
+                'epoch': epoch + 1,  # next start epoch
+                'arch': args.arch,
+                'state_dict': model.state_dict(),
+                'min_loss': 0,
+                'optimizer': optimizer.state_dict(),
+            }
+            torch.save(state, str(i) + 'newModel.pth.tar')
+            print("Model saved at iteration:", i)
+        
+        
         
         if(skip==1):
             skipped += 1
@@ -133,7 +147,7 @@ for epoch in range(5):
             writer.add_scalar("total_loss", loss.item(), epoch*(len(val_dataset)) + i)            
         
         
-        if(i%100 == 0):
+        if(False):
             output_checker = model_checker(pc1, pc2, generated_data)
             output_mean_translation_checker = torch.mean(output_checker,axis=2)
             translated_box1_checker = box1 + output_mean_translation_checker

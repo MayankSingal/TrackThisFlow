@@ -247,6 +247,19 @@ def inverse_rigid_trans(Tr):
     inv_Tr[0:3,3] = np.dot(-np.transpose(Tr[0:3,0:3]), Tr[0:3,3])
     return inv_Tr
 
+# import shutil
+# import os, sys
+# def save_checkpoint(state, is_best, ckpt_dir, filename='checkpoint.pth.tar'):
+#     torch.save(state, os.path.join(ckpt_dir, filename))
+#     if state['epoch'] % 1 == 0:
+#         shutil.copyfile(
+#             os.path.join(ckpt_dir, filename),
+#             os.path.join(ckpt_dir, 'checkpoint_'+str(state['epoch'])+'.pth.tar'))
+
+#     if is_best:
+#         shutil.copyfile(
+#             os.path.join(ckpt_dir, filename),
+#             os.path.join(ckpt_dir, 'model_best.pth.tar'))
 
 # def filter_points_inside_cube():
    
