@@ -13,11 +13,14 @@ import cmd_args
 import open3d as o3d
 from utils_dataset import lines
 from torch.utils.tensorboard import SummaryWriter
+import os
 
 
-args = cmd_args.parse_args_from_yaml("/home/mayank/Mayank/TrackThisFlow/configs/test_ours_KITTI.yaml")
-
-basedir = "/home/mayank/Data/KITTI/training/"
+# args = cmd_args.parse_args_from_yaml("/home/mayank/Mayank/TrackThisFlow/configs/test_ours_KITTI.yaml")
+args = cmd_args.parse_args_from_yaml("/home/ajangid/others/vlr/project/code/TrackThisFlow/configs/test_ours_KITTI.yaml")
+# basedir = "/home/mayank/Data/KITTI/training/"
+basedir = "/home/ajangid/datasets/KITTI_sf/training/"
+savedir = "/home/ajangid/others/vlr/project/code/TrackThisFlow/trained_models"
 
 writer = SummaryWriter()
 
@@ -103,7 +106,8 @@ for epoch in range(1):
                 'min_loss': 0,
                 'optimizer': optimizer.state_dict(),
             }
-            torch.save(state, str(i) + 'newModel.pth.tar')
+            # torch.save(state, str(i) + 'newModel.pth.tar')
+            torch.save(state, os.path.join(savedir,"iter_{}.pth.tar".format(i)))
             print("Model saved at iteration:", i)
         
         

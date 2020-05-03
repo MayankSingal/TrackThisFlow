@@ -441,62 +441,14 @@ _CFFI_UNUSED_FN static int _cffi_to_c_char32_t(PyObject *o)
         return (int)_cffi_to_c_wchar3216_t(o);
 }
 
-_CFFI_UNUSED_FN static PyObject *_cffi_from_c_char32_t(unsigned int x)
+_CFFI_UNUSED_FN static PyObject *_cffi_from_c_char32_t(int x)
 {
     if (sizeof(_cffi_wchar_t) == 4)
         return _cffi_from_c_wchar_t((_cffi_wchar_t)x);
     else
-        return _cffi_from_c_wchar3216_t((int)x);
+        return _cffi_from_c_wchar3216_t(x);
 }
 
-union _cffi_union_alignment_u {
-    unsigned char m_char;
-    unsigned short m_short;
-    unsigned int m_int;
-    unsigned long m_long;
-    unsigned long long m_longlong;
-    float m_float;
-    double m_double;
-    long double m_longdouble;
-};
-
-struct _cffi_freeme_s {
-    struct _cffi_freeme_s *next;
-    union _cffi_union_alignment_u alignment;
-};
-
-_CFFI_UNUSED_FN static int
-_cffi_convert_array_argument(struct _cffi_ctypedescr *ctptr, PyObject *arg,
-                             char **output_data, Py_ssize_t datasize,
-                             struct _cffi_freeme_s **freeme)
-{
-    char *p;
-    if (datasize < 0)
-        return -1;
-
-    p = *output_data;
-    if (p == NULL) {
-        struct _cffi_freeme_s *fp = (struct _cffi_freeme_s *)PyObject_Malloc(
-            offsetof(struct _cffi_freeme_s, alignment) + (size_t)datasize);
-        if (fp == NULL)
-            return -1;
-        fp->next = *freeme;
-        *freeme = fp;
-        p = *output_data = (char *)&fp->alignment;
-    }
-    memset((void *)p, 0, (size_t)datasize);
-    return _cffi_convert_array_from_object(p, ctptr, arg);
-}
-
-_CFFI_UNUSED_FN static void
-_cffi_free_array_arguments(struct _cffi_freeme_s *freeme)
-{
-    do {
-        void *p = (void *)freeme;
-        freeme = freeme->next;
-        PyObject_Free(p);
-    } while (freeme != NULL);
-}
 
 /**********  end CPython-specific section  **********/
 #else
@@ -573,14 +525,15 @@ _cffi_f_khash_int2int_destroy(PyObject *self, PyObject *arg0)
 {
   void * x0;
   Py_ssize_t datasize;
-  struct _cffi_freeme_s *large_args_free = NULL;
 
   datasize = _cffi_prepare_pointer_call_argument(
       _cffi_type(1), arg0, (char **)&x0);
   if (datasize != 0) {
-    x0 = ((size_t)datasize) <= 640 ? (void *)alloca((size_t)datasize) : NULL;
-    if (_cffi_convert_array_argument(_cffi_type(1), arg0, (char **)&x0,
-            datasize, &large_args_free) < 0)
+    if (datasize < 0)
+      return NULL;
+    x0 = (void *)alloca((size_t)datasize);
+    memset((void *)x0, 0, (size_t)datasize);
+    if (_cffi_convert_array_from_object((char *)x0, _cffi_type(1), arg0) < 0)
       return NULL;
   }
 
@@ -591,7 +544,6 @@ _cffi_f_khash_int2int_destroy(PyObject *self, PyObject *arg0)
   Py_END_ALLOW_THREADS
 
   (void)self; /* unused */
-  if (large_args_free != NULL) _cffi_free_array_arguments(large_args_free);
   Py_INCREF(Py_None);
   return Py_None;
 }
@@ -611,9 +563,7 @@ _cffi_f_khash_int2int_get(PyObject *self, PyObject *args)
   khint64_t x1;
   khint64_t x2;
   Py_ssize_t datasize;
-  struct _cffi_freeme_s *large_args_free = NULL;
   khint64_t result;
-  PyObject *pyresult;
   PyObject *arg0;
   PyObject *arg1;
   PyObject *arg2;
@@ -624,9 +574,11 @@ _cffi_f_khash_int2int_get(PyObject *self, PyObject *args)
   datasize = _cffi_prepare_pointer_call_argument(
       _cffi_type(1), arg0, (char **)&x0);
   if (datasize != 0) {
-    x0 = ((size_t)datasize) <= 640 ? (void *)alloca((size_t)datasize) : NULL;
-    if (_cffi_convert_array_argument(_cffi_type(1), arg0, (char **)&x0,
-            datasize, &large_args_free) < 0)
+    if (datasize < 0)
+      return NULL;
+    x0 = (void *)alloca((size_t)datasize);
+    memset((void *)x0, 0, (size_t)datasize);
+    if (_cffi_convert_array_from_object((char *)x0, _cffi_type(1), arg0) < 0)
       return NULL;
   }
 
@@ -645,9 +597,7 @@ _cffi_f_khash_int2int_get(PyObject *self, PyObject *args)
   Py_END_ALLOW_THREADS
 
   (void)self; /* unused */
-  pyresult = _cffi_from_c_int(result, khint64_t);
-  if (large_args_free != NULL) _cffi_free_array_arguments(large_args_free);
-  return pyresult;
+  return _cffi_from_c_int(result, khint64_t);
 }
 #else
 #  define _cffi_f_khash_int2int_get _cffi_d_khash_int2int_get
@@ -662,7 +612,6 @@ static PyObject *
 _cffi_f_khash_int2int_init(PyObject *self, PyObject *noarg)
 {
   void * result;
-  PyObject *pyresult;
 
   Py_BEGIN_ALLOW_THREADS
   _cffi_restore_errno();
@@ -672,8 +621,7 @@ _cffi_f_khash_int2int_init(PyObject *self, PyObject *noarg)
 
   (void)self; /* unused */
   (void)noarg; /* unused */
-  pyresult = _cffi_from_c_pointer((char *)result, _cffi_type(1));
-  return pyresult;
+  return _cffi_from_c_pointer((char *)result, _cffi_type(1));
 }
 #else
 #  define _cffi_f_khash_int2int_init _cffi_d_khash_int2int_init
@@ -691,9 +639,7 @@ _cffi_f_khash_int2int_set(PyObject *self, PyObject *args)
   khint64_t x1;
   khint64_t x2;
   Py_ssize_t datasize;
-  struct _cffi_freeme_s *large_args_free = NULL;
   int result;
-  PyObject *pyresult;
   PyObject *arg0;
   PyObject *arg1;
   PyObject *arg2;
@@ -704,9 +650,11 @@ _cffi_f_khash_int2int_set(PyObject *self, PyObject *args)
   datasize = _cffi_prepare_pointer_call_argument(
       _cffi_type(1), arg0, (char **)&x0);
   if (datasize != 0) {
-    x0 = ((size_t)datasize) <= 640 ? (void *)alloca((size_t)datasize) : NULL;
-    if (_cffi_convert_array_argument(_cffi_type(1), arg0, (char **)&x0,
-            datasize, &large_args_free) < 0)
+    if (datasize < 0)
+      return NULL;
+    x0 = (void *)alloca((size_t)datasize);
+    memset((void *)x0, 0, (size_t)datasize);
+    if (_cffi_convert_array_from_object((char *)x0, _cffi_type(1), arg0) < 0)
       return NULL;
   }
 
@@ -725,9 +673,7 @@ _cffi_f_khash_int2int_set(PyObject *self, PyObject *args)
   Py_END_ALLOW_THREADS
 
   (void)self; /* unused */
-  pyresult = _cffi_from_c_int(result, int);
-  if (large_args_free != NULL) _cffi_free_array_arguments(large_args_free);
-  return pyresult;
+  return _cffi_from_c_int(result, int);
 }
 #else
 #  define _cffi_f_khash_int2int_set _cffi_d_khash_int2int_set
