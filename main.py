@@ -13,6 +13,7 @@ import cmd_args
 import open3d as o3d
 from utils_dataset import lines
 from torch.utils.tensorboard import SummaryWriter
+from loss_fn import iou_projected_to_2d
 
 
 args = cmd_args.parse_args_from_yaml("/home/mayank/Mayank/TrackThisFlow/configs/test_ours_KITTI.yaml")
@@ -61,10 +62,7 @@ viz = True
 
 def nearest_neighbour(x, y):
     
-    # r_xyz1 = torch.sum(xyz1 * xyz1, dim=2, keepdim=True)  # (B,N,1)
-    # r_xyz2 = torch.sum(xyz2 * xyz2, dim=2, keepdim=True)  # (B,M,1)
-    # mul = torch.matmul(xyz2, xyz1.permute(0,2,1))         # (B,M,N)
-    # dist = r_xyz2 - 2 * mul + r_xyz1.permute(0,2,1)       # (B,M,N)
+
     x = x[0]
     y = y[0]
     
@@ -86,7 +84,7 @@ def nearest_neighbour(x, y):
 
 criterion = torch.nn.MSELoss().cuda()
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.000005, weight_decay=0.0001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.00001)
 
 
 for epoch in range(1):
@@ -116,25 +114,31 @@ for epoch in range(1):
         box2 = box2.cuda()
         
         output = model(pc1, pc2, generated_data)
-        # output_checker = model_checker(pc1, pc2, generated_data)
-
-        # output = output.data.cpu().numpy()
+ 
         pc1 = pc1.cuda()
         pc2 = pc2.cuda()
         output_mean_translation = torch.mean(output,axis=2)
         translated_box1 = box1 + output_mean_translation
         
-        # output_mean_translation_checker = torch.mean(output_checker,axis=2)
-        # translated_box1_checker = box1 + output_mean_translation_checker
-        # translated_box1_checker = translated_box1_checker.view(translated_box1_checker.size(0),-1)
-        
-        # translated_box1 = translated_box1.data.numpy()
+
+
         translated_box1 = translated_box1.view(translated_box1.size(0), -1)
         box2 = box2.view(box2.size(0), -1)
         
-        loss_translation = criterion(translated_box1, box2)
+        box2_for_mse = box2.view(-1,8,3)[:,:4,:]
+        # box2_for_mse = box2_for_mse.view(box2_for_mse.size(0), -1)
+        
+        translated_box1_for_mse = translated_box1.view(-1,8,3)[:,:4,:]
+        # translated_box1_for_mse = translated_box1_for_mse.view(translated_box1_for_mse.size(0),-1)
+
+        # intersection = intersection_area_projected_to_2d(translated_box1_for_mse, box2_for_mse)
+        
+        
+        loss_translation = criterion(translated_box1_for_mse, box2_for_mse)#criterion(translated_box1, box2)
         loss_nn = nearest_neighbour(pc1+output, pc2)
-        loss = loss_translation + loss_nn
+        loss = 1-iou_projected_to_2d(translated_box1_for_mse, box2_for_mse) + loss_nn*10
+        # print(loss)
+        # brak
         
         optimizer.zero_grad()
         loss.backward()
@@ -147,7 +151,7 @@ for epoch in range(1):
             writer.add_scalar("total_loss", loss.item(), epoch*(len(val_dataset)) + i)            
         
         
-        if(False):
+        if(True):
             output_checker = model_checker(pc1, pc2, generated_data)
             output_mean_translation_checker = torch.mean(output_checker,axis=2)
             translated_box1_checker = box1 + output_mean_translation_checker
